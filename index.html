@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Bill旅行记</title>
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+  <div id="map"></div>
+  <button id="checkinBtn">打卡</button>
+  <div id="inputBox">
+    <label for="locationInput">地点：</label>
+    <input type="text" id="locationInput"><br>
+    <label for="feelingsInput">感受：</label>
+    <textarea id="feelingsInput"></textarea><br>
+    <button id="saveBtn">确定</button>
+  </div>
+  <div id="cards"></div>
+  <div class="pagination"></div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    // 初始化地图
+    function initMap() {
+      var map = L.map('map').setView([39.9042, 116.4074], 10);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+        maxZoom: 18,
+        id: 'osm'
+      }).addTo(map); 
+
+      // 获取访问者IP地址，并显示当前位置
+      fetch('https://api.ipify.org/?format=json')
+        .then(response => response.json())
+        .then(data => {
+          var ip = data.ip;
+          fetch(`https://ipapi.co/${ip}/json/`)
+            .then(response => response.json())
+            .then(data => {
+              var location = `${data.city}, ${data.region}, ${data.country_name}`;
+              L.marker([data.latitude, data.longitude]).addTo(map)
+                .bindPopup(location)
+                .openPopup();
+              map.setView([data.latitude, data.longitude], 10);
+            })
+            .catch(error => console.error(error));
+        })
+        .catch(error => console.error(error));
+    }
+
+    // 显示打卡输入框
+    $('#checkinBtn').click(function() {
+      $('#inputBox').fadeIn(300);
+    });
+
+    // 保存打卡记录
+    $('#saveBtn').click(function() {
+      var location = $('#locationInput').val();
+      var feelings = $('#feelingsInput').val();
+      var timestamp = new Date().getTime();
+      var data = {location, feelings, timestamp};
+      fetch('/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      })
+      .then(response => {
+        if (response.ok) {
+          location.reload();
+        } else {
+          console.error(`Failed to save data. Status code: ${response.status}`);
+        }
+      })
+      .catch(error => console.error(error));
+    });
+
+    // 显示打卡记录
+    function showCards(pageNum=1) {
+      fetch(`/data?page=${pageNum}`)
+        .then(response => response.json())
+        .then(data => {
+          var cards = $('#cards');
+          cards.empty();
+          data.forEach(item => {
+            var date = new Date(item.timestamp);
+            var dateString = `${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
+            var card = $('<div>').addClass('card');
+            card.append($('<div>').addClass('card-info')
+              .append($('<div>').addClass('card-location').text(item.location))
+              .append($('<div>').addClass('card-time').text(dateString))
+              .append($('<div>').text(item.feelings))
+            );
+            cards.append(card);
+          });
+          // 分页处理
+          var count = data.length;
+          var pages = Math.ceil(count / 5);
+          var pagination = $('.pagination');
+          pagination.empty();
+          for (var i = 1; i <= pages; i++) {
+            var link = $('<a>').addClass('page-link').attr('href', `#page${i}`).text(i);
+            if (i === pageNum) {
+              link.addClass('active');
+            }
+            pagination.append(link);
+          }
+        })
+        .catch(error => console.error(error));
+    }
+
+    $(document).ready(function() {
+      // 初始化地图
+      initMap();
+
+      // 显示打卡记录
+      showCards();
+
+      // 监听分页链接点击事件
+      $('.pagination').on('click', '.page-link', function(event) {
+        event.preventDefault();
+        var pageNum = parseInt($(this).text());
+        showCards(pageNum);
+      });
+    });
+  </script>
+</body>
+</html>
